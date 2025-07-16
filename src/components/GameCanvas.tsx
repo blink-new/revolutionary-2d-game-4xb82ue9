@@ -20,38 +20,85 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const [fps, setFps] = useState(60)
   const [isLoading, setIsLoading] = useState(true)
 
-  const initializeGame = useCallback(() => {
+  const initializeGame = useCallback(async () => {
     const canvas = canvasRef.current
-    if (!canvas) return
-
-    // Set canvas size to full viewport
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
+    if (!canvas) {
+      console.error('Canvas not found')
+      setIsLoading(false)
+      return
     }
 
-    resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
+    try {
+      console.log('Initializing game...')
+      
+      // Add timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.error('Game initialization timeout')
+        setIsLoading(false)
+      }, 10000) // 10 second timeout
+      
+      // Set canvas size to full viewport
+      const resizeCanvas = () => {
+        canvas.width = window.innerWidth
+        canvas.height = window.innerHeight
+        console.log(`Canvas resized to: ${canvas.width}x${canvas.height}`)
+      }
 
-    // Initialize game engine
-    gameEngineRef.current = new GameEngine(canvas, {
-      onGameOver,
-      onScoreUpdate,
-      onFpsUpdate: setFps
-    })
+      resizeCanvas()
+      window.addEventListener('resize', resizeCanvas)
 
-    gameEngineRef.current.start()
-    setIsLoading(false)
+      // Small delay to ensure canvas is ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Test if canvas context is working
+      const testCtx = canvas.getContext('2d')
+      if (!testCtx) {
+        throw new Error('Failed to get 2D context')
+      }
+      
+      // Test basic drawing
+      testCtx.fillStyle = '#ff0000'
+      testCtx.fillRect(10, 10, 50, 50)
+      console.log('Canvas test drawing successful')
 
-    return () => {
-      window.removeEventListener('resize', resizeCanvas)
-      gameEngineRef.current?.stop()
+      console.log('Creating game engine...')
+      
+      // Initialize game engine
+      gameEngineRef.current = new GameEngine(canvas, {
+        onGameOver,
+        onScoreUpdate,
+        onFpsUpdate: setFps
+      })
+
+      console.log('Starting game engine...')
+      gameEngineRef.current.start()
+      
+      console.log('Game initialized successfully!')
+      clearTimeout(timeoutId)
+      setIsLoading(false)
+
+      return () => {
+        clearTimeout(timeoutId)
+        window.removeEventListener('resize', resizeCanvas)
+        gameEngineRef.current?.stop()
+      }
+    } catch (error) {
+      console.error('Failed to initialize game:', error)
+      clearTimeout(timeoutId)
+      setIsLoading(false)
     }
   }, [onGameOver, onScoreUpdate])
 
   useEffect(() => {
-    const cleanup = initializeGame()
-    return cleanup
+    let cleanup: (() => void) | undefined
+    
+    initializeGame().then((cleanupFn) => {
+      cleanup = cleanupFn
+    }).catch(console.error)
+    
+    return () => {
+      cleanup?.()
+    }
   }, [initializeGame])
 
   // Handle keyboard controls

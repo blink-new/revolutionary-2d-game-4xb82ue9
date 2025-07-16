@@ -39,7 +39,11 @@ class GameEngine {
 
   constructor(canvas: HTMLCanvasElement, options: GameEngineOptions) {
     this.canvas = canvas
-    this.ctx = canvas.getContext('2d')!
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('Could not get 2D context from canvas')
+    }
+    this.ctx = ctx
     this.options = options
 
     // Initialize game systems
@@ -118,9 +122,11 @@ class GameEngine {
   }
 
   start() {
+    console.log('GameEngine.start() called')
     this.isRunning = true
     this.lastTime = performance.now()
-    this.gameLoop()
+    console.log('Starting game loop...')
+    this.gameLoop(this.lastTime)
   }
 
   stop() {
@@ -128,7 +134,10 @@ class GameEngine {
   }
 
   private gameLoop = (currentTime: number) => {
-    if (!this.isRunning) return
+    if (!this.isRunning) {
+      console.log('Game loop stopped')
+      return
+    }
 
     const deltaTime = currentTime - this.lastTime
     this.lastTime = currentTime
@@ -140,10 +149,19 @@ class GameEngine {
       this.options.onFpsUpdate(this.fps)
       this.frameCount = 0
       this.lastFpsTime = currentTime
+      if (this.frameCount % 60 === 0) { // Log less frequently
+        console.log(`FPS: ${this.fps}`)
+      }
     }
 
-    this.update(deltaTime)
-    this.render()
+    try {
+      this.update(deltaTime)
+      this.render()
+    } catch (error) {
+      console.error('Error in game loop:', error)
+      this.isRunning = false
+      return
+    }
 
     requestAnimationFrame(this.gameLoop)
   }

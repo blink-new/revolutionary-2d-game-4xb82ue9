@@ -94,9 +94,6 @@
   /* Disable text selection for game elements */
   .no-select {
     user-select: none;
-    user-select: none;
-    user-select: none;
-    user-select: none;
   }
   
   /* High contrast mode support */
