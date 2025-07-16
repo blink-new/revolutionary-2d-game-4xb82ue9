@@ -21,24 +21,36 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const [isLoading, setIsLoading] = useState(true)
 
   const initializeGame = useCallback(async () => {
-    const canvas = canvasRef.current
+    // Wait for canvas to be available with retry logic
+    let canvas = canvasRef.current
+    let retries = 0
+    const maxRetries = 10
+    
+    while (!canvas && retries < maxRetries) {
+      console.log(`Waiting for canvas... attempt ${retries + 1}/${maxRetries}`)
+      await new Promise(resolve => setTimeout(resolve, 100))
+      canvas = canvasRef.current
+      retries++
+    }
+    
     if (!canvas) {
-      console.error('Canvas not found')
+      console.error('Canvas not found after retries')
       setIsLoading(false)
       return
     }
 
     try {
-      console.log('Initializing game...')
+      console.log('Canvas found, initializing game...')
       
       // Add timeout to prevent infinite loading
       const timeoutId = setTimeout(() => {
         console.error('Game initialization timeout')
         setIsLoading(false)
-      }, 10000) // 10 second timeout
+      }, 15000) // 15 second timeout
       
       // Set canvas size to full viewport
       const resizeCanvas = () => {
+        if (!canvas) return
         canvas.width = window.innerWidth
         canvas.height = window.innerHeight
         console.log(`Canvas resized to: ${canvas.width}x${canvas.height}`)
@@ -47,8 +59,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       resizeCanvas()
       window.addEventListener('resize', resizeCanvas)
 
-      // Small delay to ensure canvas is ready
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Wait a bit more to ensure canvas is fully ready
+      await new Promise(resolve => setTimeout(resolve, 200))
       
       // Test if canvas context is working
       const testCtx = canvas.getContext('2d')
@@ -63,12 +75,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       console.log('Creating game engine...')
       
-      // Initialize game engine
-      gameEngineRef.current = new GameEngine(canvas, {
-        onGameOver,
-        onScoreUpdate,
-        onFpsUpdate: setFps
-      })
+      // Initialize game engine with error handling
+      try {
+        gameEngineRef.current = new GameEngine(canvas, {
+          onGameOver,
+          onScoreUpdate,
+          onFpsUpdate: setFps
+        })
+      } catch (engineError) {
+        console.error('Failed to create game engine:', engineError)
+        throw engineError
+      }
 
       console.log('Starting game engine...')
       gameEngineRef.current.start()
@@ -80,24 +97,54 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       return () => {
         clearTimeout(timeoutId)
         window.removeEventListener('resize', resizeCanvas)
-        gameEngineRef.current?.stop()
+        if (gameEngineRef.current) {
+          gameEngineRef.current.stop()
+          gameEngineRef.current = null
+        }
       }
     } catch (error) {
       console.error('Failed to initialize game:', error)
-      clearTimeout(timeoutId)
       setIsLoading(false)
+      
+      // Show error state to user
+      setTimeout(() => {
+        alert('Failed to initialize game. Please refresh the page and try again.')
+      }, 100)
     }
   }, [onGameOver, onScoreUpdate])
 
   useEffect(() => {
     let cleanup: (() => void) | undefined
+    let isMounted = true
     
-    initializeGame().then((cleanupFn) => {
-      cleanup = cleanupFn
-    }).catch(console.error)
+    const init = async () => {
+      if (!isMounted) return
+      
+      try {
+        const cleanupFn = await initializeGame()
+        if (isMounted) {
+          cleanup = cleanupFn
+        } else {
+          // Component unmounted during initialization
+          cleanupFn?.()
+        }
+      } catch (error) {
+        console.error('Failed to initialize game:', error)
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+    
+    init()
     
     return () => {
+      isMounted = false
       cleanup?.()
+      if (gameEngineRef.current) {
+        gameEngineRef.current.stop()
+        gameEngineRef.current = null
+      }
     }
   }, [initializeGame])
 

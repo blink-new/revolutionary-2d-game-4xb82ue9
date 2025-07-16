@@ -38,6 +38,10 @@ class GameEngine {
   private touches: Map<number, Vector2D> = new Map()
 
   constructor(canvas: HTMLCanvasElement, options: GameEngineOptions) {
+    if (!canvas) {
+      throw new Error('Canvas element is required')
+    }
+    
     this.canvas = canvas
     const ctx = canvas.getContext('2d')
     if (!ctx) {
@@ -46,17 +50,27 @@ class GameEngine {
     this.ctx = ctx
     this.options = options
 
-    // Initialize game systems
-    this.particleSystem = new ParticleSystem()
-    this.lightingSystem = new LightingSystem(this.ctx)
-    
-    // Initialize player at center
-    this.player = new Player({
-      x: canvas.width / 2,
-      y: canvas.height / 2
-    })
+    console.log('GameEngine: Canvas dimensions:', canvas.width, 'x', canvas.height)
 
-    this.setupEventListeners()
+    // Initialize game systems
+    try {
+      this.particleSystem = new ParticleSystem()
+      this.lightingSystem = new LightingSystem(this.ctx)
+      
+      // Initialize player at center
+      this.player = new Player({
+        x: canvas.width / 2,
+        y: canvas.height / 2
+      })
+
+      console.log('GameEngine: Player initialized at:', this.player.position)
+      
+      this.setupEventListeners()
+      console.log('GameEngine: Event listeners set up')
+    } catch (error) {
+      console.error('GameEngine: Failed to initialize systems:', error)
+      throw error
+    }
   }
 
   private setupEventListeners() {
@@ -149,21 +163,35 @@ class GameEngine {
       this.options.onFpsUpdate(this.fps)
       this.frameCount = 0
       this.lastFpsTime = currentTime
-      if (this.frameCount % 60 === 0) { // Log less frequently
-        console.log(`FPS: ${this.fps}`)
-      }
     }
 
     try {
+      // Validate canvas is still available
+      if (!this.canvas || !this.ctx) {
+        console.error('Canvas or context lost during game loop')
+        this.isRunning = false
+        return
+      }
+
       this.update(deltaTime)
       this.render()
     } catch (error) {
       console.error('Error in game loop:', error)
-      this.isRunning = false
-      return
+      
+      // Try to recover from certain errors
+      if (error.message.includes('canvas') || error.message.includes('context')) {
+        console.log('Canvas-related error, stopping game')
+        this.isRunning = false
+        return
+      }
+      
+      // For other errors, continue but log them
+      console.log('Continuing game loop despite error')
     }
 
-    requestAnimationFrame(this.gameLoop)
+    if (this.isRunning) {
+      requestAnimationFrame(this.gameLoop)
+    }
   }
 
   private update(deltaTime: number) {
